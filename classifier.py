@@ -2,7 +2,7 @@ from neural import *
 import torchvision
 import torchvision.transforms as transforms
 
-class classifier(neural):
+class Classifier(Neural):
 
     def __init__(self, layers=None, optimizer=None, loss_fn=nn.MSELoss(), device=torch.device('cpu'), classes=[]):
         super().__init__(layers=layers, optimizer=optimizer, loss_fn=loss_fn, device=device)

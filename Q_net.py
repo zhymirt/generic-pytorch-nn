@@ -1,7 +1,7 @@
 from neural import *
 import random
 
-class Q_net(neural):
+class Q_net(Neural):
 
     def __init__(self, layers=None, optimizer=None, loss_fn=nn.MSELoss(), device=torch.device('cpu'), q_values={}):
         super(Q_net, self).__init__()

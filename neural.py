@@ -1,14 +1,15 @@
-import torch
-import torch.optim as optim
-import torch.nn as nn
-import torch.nn.functional as F
 from collections import OrderedDict
 from copy import deepcopy
-from torch.utils.data import TensorDataset
-from torch.utils.data import DataLoader
-from torch.nn.utils import prune
+
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+from torch.nn.utils import prune
+from torch.utils.data import DataLoader, TensorDataset
+
 
 use_cuda = False
 device = torch.device('cuda') if torch.cuda.is_available() and use_cuda else torch.device('cpu')
@@ -69,10 +70,10 @@ class WrappedDataLoader:
         for b in batches:
             yield (self.func(*b))
 
-class neural(nn.Module):
+class Neural(nn.Module):
     """ Generic neural network class for simple neural network construction with nn.Sequential"""
     def __init__(self, layers=None, optimizer=None, loss_fn=nn.MSELoss(), device=torch.device('cpu')):
-        super(neural, self).__init__()
+        super(Neural, self).__init__()
         self.device = device
         self.loss = None
         self.loaded_dict = None
