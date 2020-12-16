@@ -1,6 +1,14 @@
-from neural import *
-from classifier import Classifier
 import random
+from collections import OrderedDict
+from copy import deepcopy
+
+import torch
+from torch import nn
+from torch.utils.data import DataLoader, TensorDataset, ConcatDataset
+
+from classifier import Classifier
+from neural import *
+
 use_cuda = False
 device = torch.device('cuda') if torch.cuda.is_available() and use_cuda else torch.device('cpu')
 print("Cuda available? ", torch.cuda.is_available())
@@ -20,27 +28,39 @@ class GAN(Neural):
     def forward(self, x, single_entry=False):
         return self.gen.forward(x, single_entry)
 
-    def fit(self, train_loader, valid_loader=None, discrim_trained=False, epochs=1, k=1):
+    def fit(self, data, valid_loader=None, discrim_trained=False, epochs=1, k=1):
+        if isinstance(data, tuple):
+            data = TensorDataset(data[0], data[1])
+        if isinstance(data, TensorDataset):
+            data = DataLoader(data)
         for i in range(epochs):
-            # print(i)
+            print('Epoch {}'.format(i+1))
             # train discrim
             # print('train discriminator')
-            size = train_loader.batch_size
-            for _, (discrim_x, discrim_y) in zip(range(k), train_loader):
+            size = data.batch_size
+            for _, (discrim_x, discrim_y) in zip(range(k), data):
                 gen_x = self.generate_values(size)
-                gen_y = torch.tensor([[1.0, 0.0] for _ in range(size)])
-                self.train_discrim(gen_x, gen_y, discrim_x, discrim_y)
+                fake_labels = torch.tensor([[1.0, 0.0] for _ in range(size)])
+                real_labels = torch.tensor([[0.0, 1.0] for _ in range(size)])
+                combined_x = torch.cat((discrim_x, gen_x))
+                combined_y = torch.cat((discrim_y, fake_labels))
+                new_loader = DataLoader(TensorDataset(combined_x, combined_y))
+                self.discrim.fit(new_loader)
+                # for joint_x, joint_y in new_loader:
+                #     self.discrim.compute_loss(joint_x, joint_y, training=True)
+                # self.train_discrim(gen_x, gen_y, discrim_x, discrim_y)
             # train generator
             # print('train generator')
-            for _, (discrim_x, discrim_y) in zip(range(k), train_loader):
-                gen_x = self.generate_values(size)
-                gen_y = torch.tensor([[1.0] for _ in range(size)])
-                self.train_gen(gen_x, gen_y)
+                self.gen.compute_loss(self.discrim(gen_x), real_labels, is_guess=True, training=True)
+            # for _, (discrim_x, discrim_y) in zip(range(k), train_loader):
+            #     gen_x = self.generate_values(size)
+            #     gen_y = torch.tensor([[1.0] for _ in range(size)])
+            #     self.train_gen(gen_x, gen_y)
 
     def train_discrim(self, gen_in, gen_correct, discrim_in, discrim_correct):
         self.discrim.train()
-        self.discrim.optimizer.zero_grad()
-        self.discrim.compute_loss(discrim_in, discrim_correct, is_guess=False, training=False)
+        # self.discrim.optimizer.zero_grad()
+        self.discrim.compute_loss(discrim_in, discrim_correct, is_guess=False, training=True)
         self.discrim.loss.backward()
         self.discrim.compute_loss(gen_in, gen_correct, is_guess=False, training=False)
         self.discrim.loss.backward()
@@ -114,14 +134,16 @@ if __name__ == '__main__':
     train_data_loader = DataLoader(train_data, batch_size=8000, shuffle=True)
     validate_data_loader = DataLoader(validate_data, batch_size=4)
     test_data_loader = DataLoader(test_data, batch_size=1000)
+    # optimizer = torch.optim.Adam(nn.Sequential(gen_layers2).parameters())
 
-    gen = Neural(layers=gen_layers2)
-    discrim = Classifier(layers=discrim_layers2)
+    gen = Neural(layers=gen_layers2, optimizer='adam')
+    discrim = Classifier(layers=discrim_layers2, optimizer='adam')
+    print(gen.optimizer, ' ', discrim.optimizer)
     discrim.set_loss_function(nn.BCEWithLogitsLoss())
     gan1 = GAN(discrim=discrim, gen=gen)
 
     print(gan1.generate_values(10))
-    gan1.fit(train_data_loader, validate_data_loader, epochs=1000, k=1)
+    gan1.fit(train_data_loader, validate_data_loader, epochs=4, k=1)
     print(gan1.generate_values(1))
     print(gan1.compute_loss(gan1.generate_values(1), torch.tensor([[1.0]]), is_guess=False))
     # print(gan1.generate_values(1))

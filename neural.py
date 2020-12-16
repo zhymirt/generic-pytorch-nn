@@ -85,12 +85,22 @@ class Neural(nn.Module):
         self.loss_fn = loss_function
 
     def set_optimizer(self, optimizer):
-        if optimizer:
+        if isinstance(optimizer, torch.optim.Optimizer):
             self.optimizer = optimizer
-        elif not optimizer and self.network:
-            self.optimizer = optim.Adam(self.parameters())
+        elif isinstance(optimizer, str):
+            if optimizer == 'adam':
+                self.optimizer = optim.Adam(self.parameters())
+            elif optimizer == 'sgd':
+                self.optimizer = optim.SGD(self.parameters())
+            else:
+                print('{} is unknown optimizer option'.format(optimizer))
+        # if optimizer:
+        #     self.optimizer = optimizer
+        # elif not optimizer and self.network:
+        #     self.optimizer = optim.Adam(self.parameters())
         else:
             print('Likely no optimizer given and no network found')
+            return
 
     def set_optimizer_lambda(self, optimizer):
         """" Sets optimizer using lambda function as optimizer input."""
@@ -102,17 +112,20 @@ class Neural(nn.Module):
             print('Likely no optimizer given and no network found')
 
     def set_network(self, network):
-        self.network = nn.Sequential(network) if network else None
-        if not network:
+        if network is None:
             print("Model has no layers")
+            return
+        self.network = network if isinstance(network, nn.Sequential) else nn.Sequential(network)
 
     def forward(self, x, single_entry=False):
-        if single_entry:
-            x = torch.unsqueeze(x, 0)
+        x = torch.unsqueeze(x, 0) if single_entry else x
+        # if single_entry:
+        #     x = torch.unsqueeze(x, 0)
         x = x.to(self.device) if is_cuda(self.device) else x
-        if self.network:
-            return self.network(x)
-        return x
+        return self.network(x) if self.network else x
+        # if self.network:
+        #     return self.network(x)
+        # return x
 
     def print_observation(self, input_dataset, index):
         """
@@ -124,6 +137,18 @@ class Neural(nn.Module):
         print('Input: ', input_data)
         print('Calculated answer: ', self.forward(input_data, single_entry=True))
         print('Correct: ', correct_data)
+
+    def fit(self, data, epochs=1, batch_size=100):
+        """ Convert data to data loader and train."""
+        if isinstance(data, tuple):
+            data = TensorDataset(data[0], data[1])
+        if isinstance(data, TensorDataset):
+            data = DataLoader(data)
+        for epoch in range(epochs):
+            self.train()
+            for train_in, train_out in data:
+                self.compute_loss(train_in, train_out, is_guess=False, training=True)
+            self.eval()
 
     def train_with_loader(self, data, validating_data=None, scheduler=None, epochs=1):
         """
@@ -146,17 +171,20 @@ class Neural(nn.Module):
         with torch.no_grad():
             total_loss = 0
             self.eval()
-            for test_in, test_out in test_data:
-                total_loss += self.compute_loss(test_in, test_out, is_guess=False, training=False)
+            total_loss = sum([self.compute_loss(test_in, test_out, is_guess=False, training=False)
+                for test_in, test_out in test_data])
+            # for test_in, test_out in test_data:
+            #     total_loss += self.compute_loss(test_in, test_out, is_guess=False, training=False)
             return total_loss/len(test_data) if test_data else None
 
     def compute_loss(self, input_data, correct, is_guess=False, training=False):
         input_data = input_data.to(self.device) if is_cuda(self.device) else input_data
         correct = correct.to(self.device) if is_cuda(self.device) else correct
-        if is_guess:
-            self.loss = self.loss_fn(input_data,correct)
-        else:
-            self.loss = self.loss_fn(self.forward(input_data),correct)
+        self.loss = self.loss_fn(input_data if is_guess else self.forward(input_data), correct)
+        # if is_guess:
+        #     self.loss = self.loss_fn(input_data,correct)
+        # else:
+        #     self.loss = self.loss_fn(self.forward(input_data),correct)
         if training:
             self.optimizer.zero_grad()
             self.loss.backward()
@@ -179,9 +207,9 @@ class Neural(nn.Module):
             self.loaded_dict = torch.load(filename, map_location=torch.device(to_device))
         else:
             self.loaded_dict = torch.load(filename)
-        if(load_model_state):
+        if load_model_state:
             self.load_model_state(strict=load_strict)
-        if(load_optimizer):
+        if load_optimizer:
             self.load_optimizer()
 
     def load_model_state(self, strict=False):
@@ -284,3 +312,14 @@ class Neural(nn.Module):
                 mask_total += torch.sum(ten).item()
         print('mask value',mask_total)
         return mask_total
+
+if __name__ == '__main__':
+    model_layers = OrderedDict([
+        ('fc1', nn.Linear(1, 100)),
+        ('r1', nn.ReLU()),
+        ('fc2', nn.Linear(100, 100)),
+        ('r2', nn.ReLU()),
+        ('fc3', nn.Linear(100, 1))
+    ])
+    temp = Neural(model_layers, 'adam')
+    print(temp.forward(torch.Tensor([2]), single_entry=True))
