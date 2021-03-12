@@ -36,10 +36,6 @@ class Neural(nn.Module):
                 self.optimizer = optim.SGD(self.parameters())
             else:
                 print('{} is unknown optimizer option'.format(optimizer))
-        # if optimizer:
-        #     self.optimizer = optimizer
-        # elif not optimizer and self.network:
-        #     self.optimizer = optim.Adam(self.parameters())
         else:
             print('Likely no optimizer given and no network found')
             return
@@ -61,13 +57,8 @@ class Neural(nn.Module):
 
     def forward(self, x, single_entry=False):
         x = torch.unsqueeze(x, 0) if single_entry else x
-        # if single_entry:
-        #     x = torch.unsqueeze(x, 0)
         x = x.to(self.device) if is_cuda(self.device) else x
         return self.network(x) if self.network else x
-        # if self.network:
-        #     return self.network(x)
-        # return x
 
     def print_observation(self, input_dataset, index):
         """
@@ -123,10 +114,6 @@ class Neural(nn.Module):
         input_data = input_data.to(self.device) if is_cuda(self.device) else input_data
         correct = correct.to(self.device) if is_cuda(self.device) else correct
         self.loss = self.loss_fn(input_data if is_guess else self.forward(input_data), correct)
-        # if is_guess:
-        #     self.loss = self.loss_fn(input_data,correct)
-        # else:
-        #     self.loss = self.loss_fn(self.forward(input_data),correct)
         if training:
             self.optimizer.zero_grad()
             self.loss.backward()
