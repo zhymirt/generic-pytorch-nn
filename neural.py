@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from copy import deepcopy
-from tempfunctions import is_cuda
+from tempfunctions import is_cuda, set_cuda
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -53,7 +53,13 @@ class Neural(nn.Module):
         if network is None:
             print("Model has no layers")
             return
-        self.network = network if isinstance(network, nn.Sequential) else nn.Sequential(network)
+        if isinstance(network, nn.Sequential):
+            self.network = network
+        elif isinstance(network, OrderedDict):
+            self.network = nn.Sequential(network)
+        else:
+            print("Unknown object, can't make into model.")
+        # self.network = network if isinstance(network, nn.Sequential) else nn.Sequential(network)
 
     def forward(self, x, single_entry=False):
         x = torch.unsqueeze(x, 0) if single_entry else x
@@ -71,13 +77,17 @@ class Neural(nn.Module):
         print('Calculated answer: ', self.forward(input_data, single_entry=True))
         print('Correct: ', correct_data)
 
-    def fit(self, data, epochs=1, batch_size=100):
+    def fit(self, data, epochs=1, batch_size=1, print_freq=1):
         """ Convert data to data loader and train."""
         if isinstance(data, tuple):
             data = TensorDataset(data[0], data[1])
         if isinstance(data, TensorDataset):
-            data = DataLoader(data)
+            data = DataLoader(data, batch_size=batch_size)
+        # self.train_with_loader(data, epochs=epochs)
+        print_epoch = abs(print_freq if isinstance(print_freq, int) and print_freq > -1 else (print_freq) * epochs)
         for epoch in range(epochs):
+            if epoch % print_epoch == 0 and epoch != 0:
+                print("Epoch {}".format(epoch))
             self.train()
             for train_in, train_out in data:
                 self.compute_loss(train_in, train_out, is_guess=False, training=True)
@@ -243,12 +253,27 @@ class Neural(nn.Module):
         return mask_total
 
 if __name__ == '__main__':
+    # Example run of neural, makes model that tries to guess the sine of a number(currently in radians)
+    # Model 
+    from math import sin, pi, radians
+    device, dtype, data_size = set_cuda('cpu'), torch.float32, int(1e5)
     model_layers = OrderedDict([
         ('fc1', nn.Linear(1, 100)),
         ('r1', nn.ReLU()),
-        ('fc2', nn.Linear(100, 100)),
+        ('fc2', nn.Linear(100, 1024)),
         ('r2', nn.ReLU()),
-        ('fc3', nn.Linear(100, 1))
+        ('fc3', nn.Linear(1024, 1024)),
+        ('r3', nn.ReLU()),
+        ('fc4', nn.Linear(1024, 1024)),
+        ('r4', nn.ReLU()),
+        ('fc5', nn.Linear(1024, 100)),
+        ('r5', nn.ReLU()),
+        ('fc6', nn.Linear(100, 1))
     ])
-    temp = Neural(model_layers, 'adam')
-    print(temp.forward(torch.Tensor([2]), single_entry=True))
+    model = Neural(model_layers, 'adam')
+    print('sine of 0: {}, 0.25pi: {}, 0.5pi: {}, pi: {}, 1.5pi: {}, 2pi: {}'.format(sin(0), sin(pi*0.25), sin(pi*0.5), sin(pi), sin(pi*1.5), sin(pi*2)))
+    print(model.forward(torch.tensor([[0], [pi*0.25], [pi*0.5], [pi], [pi*1.5], [pi*2]], device=device, dtype=dtype), single_entry=True))
+    x_vals, y_vals = [[radians(val % 360)] for val in range(data_size)], [[sin(radians(val % 360))] for val in range(data_size)]
+    x_vals, y_vals = torch.tensor(x_vals, device=device, dtype=dtype), torch.tensor(y_vals, device=device, dtype=dtype)
+    model.fit((x_vals, y_vals), epochs=32, batch_size=2, print_freq=4)
+    print(model.forward(torch.tensor([[0], [pi*0.25], [pi*0.5], [pi], [pi*1.5], [pi*2]], device=device, dtype=dtype), single_entry=True))
