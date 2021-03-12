@@ -1,6 +1,6 @@
 from collections import OrderedDict
 from copy import deepcopy
-
+from tempfunctions import is_cuda
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -11,67 +11,9 @@ from torch.nn.utils import prune
 from torch.utils.data import DataLoader, TensorDataset
 
 
-use_cuda = False
-device = torch.device('cuda') if torch.cuda.is_available() and use_cuda else torch.device('cpu')
-print("Cuda available? ", torch.cuda.is_available())
-
-def is_cuda(device):
-    """ Returns whether cuda will be used in the current running program."""
-    return device and device == torch.device('cuda')
-
-def num_flat_features(x):
-    """ Returns number of flat features for tensor."""
-    size = x.size()[1:]
-    num_features = 1
-    for s in size:
-        num_features *= s
-    return num_features
-
-def make_transfer_model(model, num_outputs=1, freeze_layers=False, Layer=nn.Linear):
-    """
-    Converts pre-made model to be used for transfer learning, does not change input channels from original size.
-    """
-    if freeze_layers:
-        for param in model.parameters():
-            param.requires_grad = False
-    last_layer_name = list(model.named_modules())[-1][0]
-    num_features = getattr(model, last_layer_name).in_features
-    setattr(model, last_layer_name, Layer(num_features, num_outputs))
-
-# def imshow(img):
-#     img = img/2 + 0.5
-#     npimg = img.numpy()
-#     plt.imshow(np.transpose(npimg, (1,2, 0)))
-#     plt.show()
-
-class Lambda(nn.Module):
-    """
-    Wrapper class from pytorch 'what is torch.nn really' tutorial
-    to apply lambda functions in nn.Sequential.
-    """
-    def __init__(self, func):
-        super().__init__()
-        self.func = func
-
-    def forward(self, x):
-        return self.func(x)
-
-class WrappedDataLoader:
-    """  Class for wrapping dataloaders."""
-    def __init__(self, dl, func):
-        self.dl = dl
-        self.func = func
-
-    def __len__(self):
-        return len(self.dl)
-
-    def __iter__(self):
-        batches = iter(self.dl)
-        for b in batches:
-            yield (self.func(*b))
-
 class Neural(nn.Module):
     """ Generic neural network class for simple neural network construction with nn.Sequential"""
+
     def __init__(self, layers=None, optimizer=None, loss_fn=nn.MSELoss(), device=torch.device('cpu')):
         super(Neural, self).__init__()
         self.device = device
